@@ -191,7 +191,68 @@ function runFlyingPhase() {
     }
   }, 100);
 }
+// ================= ADMIN ROUTES =================
+app.get('/api/admin/transactions', async (req, res) => {
+  try {
+    const pendingTx = await Transaction.find({ status: 'PENDING' }).sort({ createdAt: -1 });
+    const totalUsers = await User.countDocuments();
+    let pendingDepTotal = 0, pendingWthTotal = 0, pendingDepCount = 0, pendingWthCount = 0;
 
+    pendingTx.forEach(t => {
+      if (t.type === 'DEPOSIT') {
+        pendingDepTotal += t.amount;
+        pendingDepCount++;
+      } else if (t.type === 'WITHDRAW') {
+        pendingWthTotal += t.amount;
+        pendingWthCount++;
+      }
+    });
+
+    res.json({
+      success: true,
+      stats: { totalUsers, pendingDepCount, pendingDepTotal, pendingWthCount, pendingWthTotal },
+      transactions: pendingTx
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/transactions/approve', async (req, res) => {
+  try {
+    const { txId } = req.body;
+    const tx = await Transaction.findById(txId);
+    if (!tx) return res.status(404).json({ success: false, message: "Transaction nahi mili." });
+
+    if (tx.type === 'DEPOSIT') {
+      await User.findByIdAndUpdate(tx.userId, { $inc: { balance: tx.amount } });
+    }
+
+    tx.status = 'APPROVED';
+    await tx.save();
+    res.json({ success: true, message: "Request kamyabi se Approve ho gayi!" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/transactions/reject', async (req, res) => {
+  try {
+    const { txId } = req.body;
+    const tx = await Transaction.findById(txId);
+    if (!tx) return res.status(404).json({ success: false, message: "Transaction nahi mili." });
+
+    if (tx.type === 'WITHDRAW') {
+      await User.findByIdAndUpdate(tx.userId, { $inc: { balance: tx.amount } });
+    }
+
+    tx.status = 'REJECTED';
+    await tx.save();
+    res.json({ success: true, message: "Request Reject karke balance wapas kar diya gaya." });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 // CONNECT DATABASE & RUN SERVER
 const PORT = process.env.PORT || 5000;
 mongoose.connect(MONGO_URI)
